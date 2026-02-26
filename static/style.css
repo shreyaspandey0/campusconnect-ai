@@ -1,0 +1,255 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    overflow-x: hidden;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Header */
+header {
+    background-color: #004085;
+    /* Dark Blue */
+    color: white;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo img {
+    height: 60px;
+    /* Adjust based on actual logo aspect ratio */
+    display: block;
+}
+
+nav ul {
+    list-style: none;
+    display: flex;
+    gap: 20px;
+}
+
+nav a {
+    color: white;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 14px;
+    text-transform: capitalize;
+    /* Or uppercase if preferred, image looks Title Case */
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+
+/* Hero Section */
+.hero {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 80px);
+    /* Adjust height as needed */
+    background-image: url('college.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* Hero Content Box */
+.hero-overlay {
+    position: absolute;
+    bottom: 50px;
+    left: 50px;
+    /* Adjust positioning */
+    z-index: 10;
+}
+
+.hero-content {
+    background-color: #004085;
+    /* Match header blue */
+    color: white;
+    padding: 20px 40px;
+    border: 2px solid white;
+    /* Optional border if seen in image */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    display: inline-block;
+}
+
+.hero-content h1 {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.hero-content p {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* Social Sidebar */
+.social-sidebar {
+    position: absolute;
+    right: 0;
+    top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 20;
+}
+
+.social-icon {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 40px;
+    height: 40px;
+    background-color: #004085;
+    color: white;
+    text-decoration: none;
+    font-size: 18px;
+}
+
+.social-icon:hover {
+    background-color: #003366;
+}
+
+/* Navigation Arrows */
+.nav-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: rgba(255, 255, 255, 0.7);
+    width: 40px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    color: #004085;
+    font-size: 24px;
+}
+
+.left-arrow {
+    left: 0;
+}
+
+.right-arrow {
+    right: 0;
+}
+
+.pause-icon {
+    position: absolute;
+    bottom: 50px;
+    /* Align with content box roughly */
+    right: 50px;
+    background-color: rgba(255, 255, 255, 0.7);
+    width: 30px;
+    height: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #004085;
+}
+
+/* Welcome Section */
+.welcome {
+    padding: 60px 0;
+    text-align: center;
+    background-color: white;
+}
+
+.welcome h2 {
+    font-size: 32px;
+    color: #333;
+    margin-bottom: 30px;
+    font-weight: 700;
+    position: relative;
+    display: inline-block;
+}
+
+.welcome h2 .underline-target {
+    position: relative;
+}
+
+/* Red underline effect */
+.welcome h2 .underline-target::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: -5px;
+    width: 100%;
+    height: 4px;
+    background-color: #dc3545;
+    /* Red color */
+}
+
+.welcome p {
+    max-width: 900px;
+    margin: 0 auto;
+    color: #555;
+    line-height: 1.6;
+    font-size: 16px;
+}
+
+/* Footer */
+footer {
+    background-color: #003366;
+    /* Dark Blue */
+    color: white;
+    padding: 50px 0;
+}
+
+.footer-container {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+}
+
+.footer-col {
+    flex: 1;
+    min-width: 250px;
+    margin-bottom: 20px;
+}
+
+.footer-col h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+}
+
+.footer-col p {
+    font-size: 14px;
+    line-height: 1.8;
+    margin-bottom: 10px;
+}
+
+.footer-col ul {
+    list-style: none;
+}
+
+.footer-col ul li {
+    margin-bottom: 10px;
+}
+
+.footer-col ul li a {
+    color: white;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.footer-col ul li a:hover {
+    text-decoration: underline;
+}
