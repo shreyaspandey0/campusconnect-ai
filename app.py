@@ -1,7 +1,7 @@
 import os
 import re
 import json
-import psycopg2
+import sqlite3
 import datetime
 import time
 import random
@@ -26,38 +26,33 @@ def log_to_file(msg):
 # Using the key from environment variables
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")# Groq Model
 MODEL_NAME = 'llama-3.1-8b-instant'
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DB_NAME = 'college_chat.db'
 
 app = Flask(__name__)
 CORS(app)
 
 # --- Database Setup ---
 def init_db():
-    if not DATABASE_URL:
-        print("Warning: DATABASE_URL not set. Skipping database initialization.")
-        return
-
     try:
-        with psycopg2.connect(DATABASE_URL) as conn:
-            with conn.cursor() as c:
-                c.execute('''CREATE TABLE IF NOT EXISTS leads
-                             (id SERIAL PRIMARY KEY,
-                              name TEXT,
-                              phone TEXT,
-                              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-                
-                c.execute('''CREATE TABLE IF NOT EXISTS chat_history
-                             (id SERIAL PRIMARY KEY,
-                              user_message TEXT,
-                              bot_response TEXT,
-                              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute('''CREATE TABLE IF NOT EXISTS leads
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          name TEXT,
+                          phone TEXT,
+                          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            
+            c.execute('''CREATE TABLE IF NOT EXISTS chat_history
+                         (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          user_message TEXT,
+                          bot_response TEXT,
+                          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
             conn.commit()
     except Exception as e:
         print(f"Database initialization error: {e}")
 
 init_db()
 
-# --- Gemini AI Setup ---
 # --- Groq AI Setup ---
 if GROQ_API_KEY:
     try:
@@ -282,74 +277,69 @@ def admin_dashboard():
 
 @app.route('/api/stats')
 def get_stats():
-    if not DATABASE_URL:
-        return jsonify({"error": "DATABASE_URL not set"}), 500
-        
     try:
-        with psycopg2.connect(DATABASE_URL) as conn:
-            with conn.cursor() as c:
-                c.execute("SELECT COUNT(*) FROM chat_history")
-                total_chats = c.fetchone()[0]
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("SELECT COUNT(*) FROM chat_history")
+            total_chats = c.fetchone()[0]
+            
+            c.execute("SELECT COUNT(*) FROM leads")
+            total_leads = c.fetchone()[0]
+            
+            c.execute("SELECT name, phone, created_at FROM leads ORDER BY id DESC LIMIT 10")
+            leads_rows = c.fetchall()
+            leads_list = [{"name": row[0] if row[0] else "Unknown", "phone": row[1], "time": row[2]} for row in leads_rows]
+            
+            c.execute("SELECT user_message, bot_response, created_at FROM chat_history ORDER BY id DESC LIMIT 10")
+            chats_rows = c.fetchall()
+            chats_list = [{"user": row[0], "bot": row[1], "time": row[2]} for row in chats_rows]
+            
+            traffic_labels = []
+            traffic_data = []
+            today = datetime.date.today()
+            for i in range(6, -1, -1):
+                date = today - datetime.timedelta(days=i)
+                date_str = date.strftime('%Y-%m-%d')
+                traffic_labels.append(date.strftime('%a'))
+                c.execute("SELECT COUNT(*) FROM chat_history WHERE DATE(created_at) = ?", (date_str,))
+                count = c.fetchone()[0]
+                traffic_data.append(count)
                 
-                c.execute("SELECT COUNT(*) FROM leads")
-                total_leads = c.fetchone()[0]
+            topics = {'Admissions': 0, 'Placements': 0, 'Fees': 0, 'Hostel': 0, 'General': 0}
+            c.execute("SELECT user_message FROM chat_history")
+            all_messages = c.fetchall()
+            for msg in all_messages:
+                text = msg[0].lower()
+                if 'admission' in text or 'apply' in text: topics['Admissions'] += 1
+                elif 'placement' in text or 'job' in text or 'package' in text: topics['Placements'] += 1
+                elif 'fee' in text or 'cost' in text: topics['Fees'] += 1
+                elif 'hostel' in text or 'mess' in text: topics['Hostel'] += 1
+                else: topics['General'] += 1
                 
-                c.execute("SELECT name, phone, created_at FROM leads ORDER BY id DESC LIMIT 10")
-                leads_rows = c.fetchall()
-                leads_list = [{"name": row[0] if row[0] else "Unknown", "phone": row[1], "time": row[2]} for row in leads_rows]
-                
-                c.execute("SELECT user_message, bot_response, created_at FROM chat_history ORDER BY id DESC LIMIT 10")
-                chats_rows = c.fetchall()
-                chats_list = [{"user": row[0], "bot": row[1], "time": row[2]} for row in chats_rows]
-                
-                traffic_labels = []
-                traffic_data = []
-                today = datetime.date.today()
-                for i in range(6, -1, -1):
-                    date = today - datetime.timedelta(days=i)
-                    date_str = date.strftime('%Y-%m-%d')
-                    traffic_labels.append(date.strftime('%a'))
-                    c.execute("SELECT COUNT(*) FROM chat_history WHERE DATE(created_at) = %s", (date_str,))
-                    count = c.fetchone()[0]
-                    traffic_data.append(count)
-                    
-                topics = {'Admissions': 0, 'Placements': 0, 'Fees': 0, 'Hostel': 0, 'General': 0}
-                c.execute("SELECT user_message FROM chat_history")
-                all_messages = c.fetchall()
-                for msg in all_messages:
-                    text = msg[0].lower()
-                    if 'admission' in text or 'apply' in text: topics['Admissions'] += 1
-                    elif 'placement' in text or 'job' in text or 'package' in text: topics['Placements'] += 1
-                    elif 'fee' in text or 'cost' in text: topics['Fees'] += 1
-                    elif 'hostel' in text or 'mess' in text: topics['Hostel'] += 1
-                    else: topics['General'] += 1
-                    
-                c.execute("SELECT COUNT(*) FROM chat_history WHERE DATE(created_at) = %s", (today.strftime('%Y-%m-%d'),))
-                queries_today = c.fetchone()[0]
-                
-                return jsonify({
-                    "total_chats": total_chats,
-                    "total_leads": total_leads,
-                    "queries_today": queries_today,
-                    "leads": leads_list,
-                    "chats": chats_list,
-                    "traffic_labels": traffic_labels,
-                    "traffic_data": traffic_data,
-                    "topic_data": list(topics.values()),
-                    "topic_labels": list(topics.keys())
-                })
+            c.execute("SELECT COUNT(*) FROM chat_history WHERE DATE(created_at) = ?", (today.strftime('%Y-%m-%d'),))
+            queries_today = c.fetchone()[0]
+            
+            return jsonify({
+                "total_chats": total_chats,
+                "total_leads": total_leads,
+                "queries_today": queries_today,
+                "leads": leads_list,
+                "chats": chats_list,
+                "traffic_labels": traffic_labels,
+                "traffic_data": traffic_data,
+                "topic_data": list(topics.values()),
+                "topic_labels": list(topics.keys())
+            })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/clear_data', methods=['DELETE'])
 def clear_data():
-    if not DATABASE_URL:
-        return jsonify({"error": "DATABASE_URL not set"}), 500
-        
     try:
-        with psycopg2.connect(DATABASE_URL) as conn:
-            with conn.cursor() as c:
-                c.execute("TRUNCATE TABLE leads, chat_history RESTART IDENTITY")
+        with sqlite3.connect(DB_NAME) as conn:
+            c = conn.cursor()
+            c.execute("DELETE FROM leads")
+            c.execute("DELETE FROM chat_history")
             conn.commit()
         return jsonify({"message": "All data cleared successfully"})
     except Exception as e:
@@ -380,14 +370,11 @@ def chat():
             if not phone:
                 phone = phone_match.group(0)
 
-            if DATABASE_URL:
-                with psycopg2.connect(DATABASE_URL) as conn:
-                    with conn.cursor() as c:
-                        c.execute("INSERT INTO leads (name, phone) VALUES (%s, %s)", (name, phone))
-                    conn.commit()
-                log_to_file(f"Lead captured: Name={name}, Phone={phone}")
-            else:
-                log_to_file("DATABASE_URL not set. Skipping lead capture.")
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO leads (name, phone) VALUES (?, ?)", (name, phone))
+                conn.commit()
+            log_to_file(f"Lead captured: Name={name}, Phone={phone}")
         except Exception as e:
             log_to_file(f"Error saving lead: {e}")
 
@@ -396,38 +383,37 @@ def chat():
         
         relevant_context = get_relevant_context(user_message)
         
-        system_instruction = f"""You are an **AI-Powered Admission Counselor** for **Dronacharya Group of Institutions (DGI)**.
-Your goal is to guide prospective students, answer their queries, and assist them in their admission journey with intelligence and empathy.
+        system_instruction = f"""You are a **Highly Intelligent Admission Counselor & Academic Mentor** representing **Dronacharya Group of Institutions (DGI)**.
+You do NOT act like a traditional, robotic AI. You speak naturally, warmly, and confidently, just like a senior professor or an expert human counselor. Your goal is to impress the user with your intelligence, clarity, and deep knowledge of DGI, while offering a highly personalized experience.
 
-BEHAVIORAL MODES:
-1. **COLLEGE EXPERT (Primary)**: For queries about DGI (Fees, Placement, Admission), use the **STRICT DATA HIERARCHY** below. You must be 100% factual and precise.
-2. **ACADEMIC MENTOR (Secondary)**: For general questions (e.g., "Future of AI", "Why Engineering?"), provide a **brief** answer (1-2 sentences) and **IMMEDIATELY relate it back to DGI**.
-   - Example: "AI is the future of innovation. At DGI, we prepare you for this with our specialized AI/ML labs and industry partnerships."
+CORE BEHAVIORAL DIRECTIVES:
+1. **100% FACTUAL ACCURACY (Zero Hallucination)**: 
+   - You MUST base all factual claims about DGI (fees, placements, courses, stats) STRICTLY on the data provided below.
+   - If a specific piece of information is missing from your context, DO NOT GUESS. Instead, respond intelligently: "That's a great question! While I don't have the exact detail in front of me right now, our admission experts have all the specifics. May I have your name and contact number so I can arrange for a senior counselor to reach out to you directly?"
 
-STRICT DATA HIERARCHY:
-1. **HIGHEST PRIORITY**: Use the `RELEVANT INFORMATION FROM COLLEGE_DATA` section.
-2. **SECONDARY**: Use `RELEVANT INFORMATION FROM WEBSITE`.
-3. **INFERENCE**: Use logical inference from the text.
-4. **FALLBACK / MISSING COLLEGE INFO**: If a specific college fact is missing, **DO NOT** guess. Politely ask: "**I would be happy to arrange a callback for you. Could you please provide your Name and Contact Number so our senior counselor can connect with you?**"
+2. **IMPRESSIVE, NON-ROBOTIC COMMUNICATION**:
+   - Avoid generic AI phrases like "As an AI..." or "I am a chatbot...".
+   - Use dynamic, enthusiastic, and sophisticated language. Show pride in DGI's legacy.
+   - Structure your answers beautifully using bullet points for readability and **bold text** to highlight key numbers or courses.
 
-CRITICAL INSTRUCTION FOR LEADS:
-- If the user shows interest in **Admissions, Fees, Placements, or Hostel**, you **MUST PROACTIVELY ASK** for their **Name and Phone Number** to arrange a callback or share a brochure.
-- Frame it helpfully: "To assist you better with the admission process, could you please share your Name and Phone Number?"
-- If the user provides their details, acknowledge it warmly: "Thank you [Name], our team will contact you shortly."
+3. **NATURAL LEAD GENERATION (The "Polite Ask")**:
+   - If the user asks about **Admissions, Fees, Placements, or Campus Life**, you must seamlessly integrate a request for their contact info into your response.
+   - **DO NOT** be aggressive or demand data abruptly. Be exceptionally polite and helpful.
+   - Example formulation: "To help me provide you with a customized brochure and ensure you get the most personalized guidance, would you mind sharing your name and phone number? I'd be happy to have our expert team connect with you."
+   - If they provide their name/number, reply with genuine warmth: "Thank you so much, [Name]! I've noted your details, and our team will be in touch very soon. Is there anything else about DGI you'd like to explore in the meantime?"
 
-GUIDELINES:
-- **Identity**: You are a professional AI Counselor for DGI.
-- **Tone**: Professional, Warm, Encouraging, and Logical.
-- **Focus**: Always steer the conversation back to DGI's strengths.
-- **Style**: Use **Bold** for key details. Be concise.
+4. **THE DGI PIVOT**:
+   - If asked a general tech or career question (e.g., "What is the future of AI?"), give a brilliant 2-sentence answer, and immediately pivot to how DGI excels in that area (e.g., "At DGI, we are actively preparing students for this exact future through our specialized AI/ML labs...").
 
-RELEVANT INFORMATION FROM COLLEGE_DATA:
+STRICT CONTEXT DATA (USE THIS EXCLUSIVELY FOR DGI FACTS):
+
+--- HIGH PRIORITY COLLEGE DATA ---
 {COLLEGE_PRIORITY_DATA}
 
-BATCH STATISTICS AND FACULTY COUNT:
+--- FACULTY & PLACEMENT STATISTICS ---
 {GLOBAL_COLLEGE_STATS}
 
-RELEVANT INFORMATION FROM WEBSITE:
+--- CONTEXTUAL WEBSITE DATA ---
 {relevant_context}
 """
         
@@ -486,14 +472,13 @@ RELEVANT INFORMATION FROM WEBSITE:
                     raise e # Not a 429 error
         
         # Log Chat
-        if DATABASE_URL:
-            try:
-                with psycopg2.connect(DATABASE_URL) as conn:
-                    with conn.cursor() as c:
-                        c.execute("INSERT INTO chat_history (user_message, bot_response) VALUES (%s, %s)", (user_message, bot_reply))
-                    conn.commit()
-            except Exception as e:
-                log_to_file(f"Failed to log chat to database: {e}")
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO chat_history (user_message, bot_response) VALUES (?, ?)", (user_message, bot_reply))
+                conn.commit()
+        except Exception as e:
+            log_to_file(f"Failed to log chat to database: {e}")
 
         return jsonify({"response": bot_reply})
 

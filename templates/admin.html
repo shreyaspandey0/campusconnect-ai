@@ -284,6 +284,13 @@
                 options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
             });
         }
+
+        // Auto-refresh data every 3 seconds if dashboard is visible
+        setInterval(() => {
+            if (!document.getElementById('dashboard-content').classList.contains('hidden')) {
+                refreshData();
+            }
+        }, 3000);
     </script>
 </body>
 

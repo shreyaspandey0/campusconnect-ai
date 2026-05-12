@@ -1,6 +1,6 @@
 # Dronacharya Group of Institutions Chatbot
 
-A Flask-based chatbot application for Dronacharya Group of Institutions using Google Gemini AI.
+A Flask-based chatbot application for Dronacharya Group of Institutions using Groq AI (Llama-3).
 
 ## Features
 - AI-powered chat interface
@@ -14,8 +14,8 @@ A Flask-based chatbot application for Dronacharya Group of Institutions using Go
    pip install -r requirements.txt
    ```
 2. Set up environment variables in `.env`:
-   - `GOOGLE_API_KEY`: Your Gemini API key
-   - `MODEL_NAME`: (Optional) Model to use
+   - `GROQ_API_KEY`: Your Groq API key
+   - `DATABASE_URL`: (Optional) PostgreSQL connection string
 3. Run the application:
    ```bash
    python app.py
