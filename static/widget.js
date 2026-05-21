@@ -188,6 +188,41 @@
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1); }
         }
+
+        @media (max-width: 480px) {
+            #dgi-chat-widget-container.open {
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100% !important;
+                height: 100% !important;
+            }
+            #dgi-chat-widget-container.open #dgi-chat-launcher {
+                display: none;
+            }
+            #dgi-chat-window {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100% !important;
+                height: 100% !important;
+                max-height: 100% !important;
+                border-radius: 0;
+                border: none;
+                z-index: 10000;
+            }
+            #dgi-chat-header {
+                padding: 18px 15px;
+                font-size: 18px;
+            }
+            #dgi-chat-input-area {
+                padding: 12px;
+                padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+            }
+        }
     `;
     document.head.appendChild(style);
 
@@ -229,9 +264,11 @@
     function toggleChat() {
         if (window.style.display === 'none' || window.style.display === '') {
             window.style.display = 'flex';
+            container.classList.add('open');
             input.focus();
         } else {
             window.style.display = 'none';
+            container.classList.remove('open');
         }
     }
 
