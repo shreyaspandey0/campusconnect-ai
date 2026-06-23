@@ -66,28 +66,29 @@ else:
     print("Warning: Groq API Key is missing.")
 
 # --- Helper Functions ---
-def load_data_chunks():
-    chunks = []
-    
-    # Helper to chunk text by lines with overlap
-    def chunk_text(text, chunk_size=50, overlap=10): # Reduced chunk size to prevent token overflow
-        lines = text.split('\n')
-        if not lines: return []
-        result = []
-        for i in range(0, len(lines), chunk_size - overlap):
-            chunk = "\n".join(lines[i:i + chunk_size])
-            if chunk.strip():
-                result.append(chunk)
-        return result
+def chunk_text(text, chunk_size=30, overlap=6):
+    lines = text.split('\n')
+    if not lines: return []
+    result = []
+    for i in range(0, len(lines), chunk_size - overlap):
+        chunk = "\n".join(lines[i:i + chunk_size])
+        if chunk.strip():
+            result.append(chunk)
+    return result
 
+def load_college_chunks():
+    chunks = []
     try:
         with open('college_data.txt', 'r', encoding='utf-8') as f:
             content = f.read()
-            # Split by double newline for manual data as it likely has paragraphs
-            chunks.extend([c for c in content.split('\n\n') if c.strip()])
+            # Split by double newline for manual data
+            chunks.extend([c.strip() for c in content.split('\n\n') if c.strip()])
     except FileNotFoundError:
-        pass 
+        pass
+    return chunks
 
+def load_website_chunks():
+    chunks = []
     try:
         with open('website_data.txt', 'r', encoding='utf-8') as f:
             content = f.read()
@@ -95,14 +96,26 @@ def load_data_chunks():
             pages = content.split('================')
             for page in pages:
                 if not page.strip(): continue
-                # Further split pages into manageable chunks
-                chunks.extend(chunk_text(page))
+                # Preprocess page to filter out link lists and footer noise
+                lines = page.split('\n')
+                cleaned_lines = []
+                for line in lines:
+                    line_stripped = line.strip()
+                    if not line_stripped:
+                        continue
+                    # Skip link boilerplate and footer
+                    if line_stripped.startswith('- Link:') or '[IMPORTANT LINKS FOUND]' in line_stripped or 'site developed & maintained by' in line_stripped or 'Xentaqsys Technologies' in line_stripped:
+                        continue
+                    cleaned_lines.append(line)
+                
+                cleaned_page = "\n".join(cleaned_lines)
+                chunks.extend(chunk_text(cleaned_page))
     except FileNotFoundError:
         pass
-        
     return chunks
 
-DATA_CHUNKS = load_data_chunks()
+COLLEGE_CHUNKS = load_college_chunks()
+WEBSITE_CHUNKS = load_website_chunks()
 
 def load_college_data():
     """Loads high-priority data from college_data.txt"""
@@ -207,9 +220,31 @@ def analyze_global_stats():
 
 GLOBAL_COLLEGE_STATS = analyze_global_stats()
 
+def score_and_rank_chunks(chunks, query_words):
+    scored_chunks = []
+    for chunk in chunks:
+        chunk_lower = chunk.lower()
+        unique_matches = sum(1 for word in set(query_words) if word in chunk_lower)
+        if unique_matches > 0:
+            score = unique_matches * 3
+            scored_chunks.append((score, chunk))
+    scored_chunks.sort(key=lambda x: (-x[0], len(x[1])))
+    return scored_chunks
+
+def select_top_chunks_within_limit(scored_chunks, max_chars=8000):
+    selected_chunks = []
+    current_length = 0
+    for score, chunk in scored_chunks:
+        if current_length + len(chunk) > max_chars:
+            if not selected_chunks:
+                selected_chunks.append(chunk[:max_chars])
+            break
+        selected_chunks.append(chunk)
+        current_length += len(chunk)
+    return "\n\n---\n\n".join(selected_chunks)
+
 def get_relevant_context(query):
-    """Finds most relevant chunks for the query."""
-    # Stopwords to filter out common noise
+    """Finds most relevant chunks for the query, prioritizing college_data.txt."""
     STOPWORDS = {
         'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'how',
         'is', 'are', 'was', 'were', 'be', 'been', 'being',
@@ -225,39 +260,34 @@ def get_relevant_context(query):
     }
 
     query = query.lower()
-    # Use regex to split by non-word characters to handle punctuation
     raw_words = re.split(r'\W+', query)
-    query_words = [w for w in raw_words if len(w) > 2 and w not in STOPWORDS] # Allow 3-letter words if not stopword (e.g. 'job', 'fee')
-    
-    scored_chunks = []
-    for chunk in DATA_CHUNKS:
-        score = 0
-        chunk_lower = chunk.lower()
-        
-        # Count unique keywords present to prioritize coverage
-        unique_matches = 0
-        for word in  set(query_words):
-             if word in chunk_lower:
-                 unique_matches += 1
-                 
-        # Score = (Unique Matches * 3) + (Total Matches)
-        # This prioritizes chunks that contain MORE of the query terms over chunks with one term repeated
-        if unique_matches > 0:
-            score = (unique_matches * 3)
-            scored_chunks.append((score, chunk))
-            
-    # Sort by score desc
-    scored_chunks.sort(key=lambda x: x[0], reverse=True)
-    
-    top_chunks = scored_chunks[:5] # Reduced to 5 chunks to save tokens
-    
-    # Log simplified debug info
+    query_words = [w for w in raw_words if len(w) > 2 and w not in STOPWORDS]
+
+    if not query_words:
+        log_to_file(f"Query: {query} -> No keywords found.")
+        return ""
+
+    # 1. Search college_data.txt chunks first
+    college_matches = score_and_rank_chunks(COLLEGE_CHUNKS, query_words)
+    best_college_score = college_matches[0][0] if college_matches else 0
+
+    threshold = min(6, len(set(query_words)) * 3)
+
     log_to_file(f"Query: {query}")
     log_to_file(f"Keywords used: {query_words}")
-    log_to_file(f"Best chunk score: {top_chunks[0][0] if top_chunks else 0}")
-    
-    # Return top chunks
-    return "\n\n---\n\n".join([c[1] for c in top_chunks])
+    log_to_file(f"Best college chunk score: {best_college_score} (Threshold: {threshold})")
+
+    if best_college_score >= threshold:
+        log_to_file("Match found in college_data.txt. Retrieving curated facts.")
+        return select_top_chunks_within_limit(college_matches, max_chars=8000)
+
+    # 2. Fall back to website_data.txt chunks
+    log_to_file("Falling back to website_data.txt search.")
+    website_matches = score_and_rank_chunks(WEBSITE_CHUNKS, query_words)
+    best_website_score = website_matches[0][0] if website_matches else 0
+    log_to_file(f"Best website chunk score: {best_website_score}")
+
+    return select_top_chunks_within_limit(website_matches, max_chars=8000)
 
 def search_local_data(query):
     """Fallback using the same logic"""
