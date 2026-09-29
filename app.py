@@ -16,7 +16,7 @@ load_dotenv()
 
 def log_to_file(msg):
     try:
-        with open("app_debug.log", "a") as f:
+        with open("app_debug.log", "a", encoding="utf-8") as f:
             f.write(f"{datetime.datetime.now()} - {msg}\n")
     except:
         pass
@@ -24,8 +24,8 @@ def log_to_file(msg):
 # --- Configuration ---
 
 # Using the key from environment variables
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")# Groq Model
-MODEL_NAME = 'llama-3.1-8b-instant'
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+MODEL_NAME = os.getenv("GROQ_MODEL", 'openai/gpt-oss-120b')
 DB_NAME = 'college_chat.db'
 
 app = Flask(__name__)
